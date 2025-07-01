@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Ensure the script is run with sudo or as root
+if [[ "$EUID" -ne 0 ]]; then
+  echo "❌ This script must be run as root. Please use sudo:"
+  echo "   sudo $0"
+  exit 1
+fi
+
 WG_INTERFACE="wg0"
 WG_DIR="/etc/wireguard"
 CLIENT_DIR=/wireguard/clients
@@ -60,6 +67,13 @@ MANAGER_SCRIPT="$CLIENT_DIR/wireguard-manager.sh"
 echo "📦 Creating WireGuard client manager..."
 cat > "$MANAGER_SCRIPT" <<'EOM'
 #!/bin/bash
+
+# Ensure the script is run with sudo or as root
+if [[ "$EUID" -ne 0 ]]; then
+  echo "❌ This script must be run as root. Please use sudo:"
+  echo "   sudo $0"
+  exit 1
+fi
 
 WG_DIR=/wireguard/clients
 WG_CONF="/etc/wireguard/wg0.conf"
@@ -124,6 +138,11 @@ function show_qr() {
   fi
 }
 
+function show_status() {
+  echo "📡 WireGuard status (sudo wg):"
+  sudo wg
+}
+
 function menu() {
   while true; do
     echo ""
@@ -131,14 +150,16 @@ function menu() {
     echo "1) Add new client"
     echo "2) List existing clients"
     echo "3) Generate QR code for a client"
-    echo "4) Exit"
+    echo "4) Show WireGuard status"
+    echo "5) Exit"
     echo "====================================="
-    read -p "Choose an option [1-4]: " choice
+    read -p "Choose an option [1-5]: " choice
     case $choice in
       1) add_user ;;
       2) list_users ;;
       3) show_qr ;;
-      4) exit ;;
+      4) show_status ;;
+      5) exit ;;
       *) echo "❌ Invalid choice." ;;
     esac
   done
@@ -150,5 +171,5 @@ EOM
 chmod +x "$MANAGER_SCRIPT"
 
 echo ""
-echo "✅ All done. You can now run the client manager with:"Add commentMore actions
+echo "✅ All done. You can now run the client manager with:"
 echo "   $MANAGER_SCRIPT"
