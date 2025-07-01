@@ -12,7 +12,6 @@ WG_DIR="/etc/wireguard"
 CLIENT_DIR=/wireguard/clients
 SERVER_PRIVATE_KEY="$WG_DIR/server_private.key"
 SERVER_PUBLIC_KEY="$WG_DIR/server_public.key"
-WireGuard_PORT=51820 # Modify it if it is behind NAT
 
 # Detect external interface
 EXT_IF=$(ip route get 1 | grep -oP 'dev \K\S+')
@@ -29,6 +28,18 @@ SERVER_PUB=$(sudo cat $SERVER_PUBLIC_KEY)
 
 # Prompt for server public IP or domain
 read -p "🌐 Enter your server's public IP or domain: " SERVER_ENDPOINT_IP
+
+# Prompt the user to enter a custom WireGuard port.
+# Accept only ports between 1024 and 65535. Use 51820 if left blank.
+while true; do
+  read -p "🔢 Enter WireGuard listen port [Press Enter for default: 51820]: " WireGuard_PORT
+  WireGuard_PORT=${WireGuard_PORT:-51820}
+  if [[ "$WireGuard_PORT" =~ ^[0-9]+$ ]] && [ "$WireGuard_PORT" -ge 1024 ] && [ "$WireGuard_PORT" -le 65535 ]; then
+    break
+  else
+    echo "❌ Invalid port. Please enter a number between 1024 and 65535."
+  fi
+done
 
 echo "📄 Creating WireGuard server config..."
 sudo bash -c "cat > $WG_DIR/$WG_INTERFACE.conf" <<EOF
