@@ -8,10 +8,10 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 WG_INTERFACE="wg0"
-WG_DIR="/etc/wireguard"
-CLIENT_DIR=/wireguard/clients
-SERVER_PRIVATE_KEY="$WG_DIR/server_private.key"
-SERVER_PUBLIC_KEY="$WG_DIR/server_public.key"
+WG_CONF_DIR="/etc/wireguard"
+CLIENT_DIR="/wireguard/clients"
+SERVER_PRIVATE_KEY="$WG_CONF_DIR/server_private.key"
+SERVER_PUBLIC_KEY="$WG_CONF_DIR/server_public.key"
 
 # Detect external interface
 EXT_IF=$(ip route get 1 | grep -oP 'dev \K\S+')
@@ -42,11 +42,11 @@ while true; do
 done
 
 echo "📄 Creating WireGuard server config..."
-sudo bash -c "cat > $WG_DIR/$WG_INTERFACE.conf" <<EOF
+sudo bash -c "cat > $WG_CONF_DIR/$WG_INTERFACE.conf" <<EOF
 [Interface]
 Address = 10.10.10.1/24
 ListenPort = 51820
-PrivateKey = $SERVER_PRIV
+PrivateKey = ${SERVER_PRIV}
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o $EXT_IF -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o $EXT_IF -j MASQUERADE
 EOF
@@ -154,6 +154,52 @@ function show_status() {
   sudo wg
 }
 
+function remove_user() {
+  read -p "Enter the client name to remove: " client
+  conf_file="$WG_DIR/${client}.conf"
+  pubkey_file="$WG_DIR/${client}_public.key"
+  privkey_file="$WG_DIR/${client}_private.key"
+
+  if [ ! -f "$conf_file" ]; then
+    echo "❌ Client '$client' does not exist."
+    return
+  fi
+
+  pubkey=$(cat "$pubkey_file")
+
+  echo "⚠️ Removing client '$client'..."
+
+  backup_config
+  
+  # Get the line number where the PublicKey appears
+  line_num=$(grep -n "PublicKey = $pubkey" "$WG_CONF" | cut -d: -f1)
+
+  if [[ -z "$line_num" ]]; then
+    echo "❌ Public key not found in WireGuard config. Nothing removed."
+    return
+  fi
+
+  # Delete [Peer] line (n-1), PublicKey line (n), and AllowedIPs line (n+1)
+  sudo sed -i "$((line_num - 1))d;${line_num}d;$((line_num + 1))d" "$WG_CONF"
+
+  # Remove the client config and keys
+  rm -f "$conf_file" "$pubkey_file" "$privkey_file"
+
+  echo "🔄 Restarting WireGuard to apply changes..."
+  sudo systemctl restart wg-quick@wg0
+
+  echo "✅ Client '$client' removed and WireGuard reloaded."
+}
+
+function backup_config() {
+  local backup_dir="/wireguard/backup"
+  local timestamp
+  timestamp=$(date +"%Y%m%d-%H%M%S")
+  mkdir -p "$backup_dir"
+  sudo cp "$WG_CONF" "$backup_dir/wg0.conf.backup.$timestamp"
+  echo "🧾 Backup saved to: $backup_dir/wg0.conf.backup.$timestamp"
+}
+
 function menu() {
   while true; do
     echo ""
@@ -162,15 +208,17 @@ function menu() {
     echo "2) List existing clients"
     echo "3) Generate QR code for a client"
     echo "4) Show WireGuard status"
-    echo "5) Exit"
+    echo "5) Remove a client"
+    echo "6) Exit"
     echo "====================================="
-    read -p "Choose an option [1-5]: " choice
+    read -p "Choose an option [1-6]: " choice
     case $choice in
       1) add_user ;;
       2) list_users ;;
       3) show_qr ;;
       4) show_status ;;
-      5) exit ;;
+      5) remove_user ;;
+      6) exit ;;
       *) echo "❌ Invalid choice." ;;
     esac
   done
